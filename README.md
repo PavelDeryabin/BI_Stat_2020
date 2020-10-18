@@ -1,1 +1,2 @@
-# BI_Stat_2020
+# Repository for Statistics and R course
+
