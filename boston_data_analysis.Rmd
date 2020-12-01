@@ -1,0 +1,325 @@
+---
+title: "Boston housing costs data analysis"
+author: "Your collaborator"
+
+output: 
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+    number_section: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(psych)
+library(car)
+library(ggplot2)
+library(dplyr)
+library(gridExtra)
+library(MASS)
+theme_set(theme_bw())
+```
+
+# Reading the data and learning its structure
+
+Dear Colleagues, here is the report of the MASS package "Boston" data analysis that aims to demonstrate how multiple factors might influence the cost of housing. 
+
+In particular, in the beginning the structure of the dataset will be described. Then, a full multiple linear regression analysis will be performed. Considering conditions of applicability further the full model will undergo optimization operations. And finally, based on the optimized model predictive analysis on a simulated data will be conducted.
+
+According to the package description the dataset includes the following variables:
+
+* CRIM - per capita crime rate by town
+* ZN - proportion of residential land zoned for lots over 25,000 sq.ft.
+* INDUS - proportion of non-retail business acres per town.
+* CHAS - Charles River dummy variable (1 if tract bounds river; 0 otherwise)
+* NOX - nitric oxides concentration (parts per 10 million)
+* RM - average number of rooms per dwelling
+* AGE - proportion of owner-occupied units built prior to 1940
+* DIS - weighted distances to five Boston employment centres
+* RAD - index of accessibility to radial highways
+* TAX - full-value property-tax rate per $10,000
+* PTRATIO - pupil-teacher ratio by town
+* LSTAT - % lower status of the population
+* MEDV - Median value of owner-occupied homes in $1000's
+
+In the frame of the current project, the last varialbe in the list would be the variable of interest  
+
+```{r, echo=FALSE}
+data("Boston")
+main <- Boston
+```
+
+```{r}
+str(main)
+```
+
+Is there some missing and duplicated values in the dataset? 
+
+```{r}
+sum(is.na(main))
+sum(duplicated(main))
+```
+
+Let's get summary statistics of each variable in the dataset, considering 'chas' variable being two-level factor variable
+
+```{r}
+main$chas <- as.factor(main$chas)
+summary(main)
+```
+
+Plotting dirty summary scatter plots to have the first look at the data
+
+```{r}
+plot(main)
+```
+
+# Multiple linear model 
+
+The first task of the analysis is to build a multiple linear model that includes all available information.
+
+## Multiple linear model construction
+
+Fitting the full model via 'lm()' command
+
+```{r}
+model <- lm(medv ~ ., main)
+summary(model)
+```
+
+### Standardization
+
+To determine which predictor has the greatest impact on the varible of interest data has to be standardized. The transformation leads the coefficients in front of the predictors to be measured in standard deviations and thus to be compared correctly
+
+```{r}
+main_scale <- main[,-4] # excluding 'chas' factor variable 
+main_scale <- as.data.frame(sapply(main_scale, scale)) 
+main_scale$chas <- main[,4] # returning back 'chas' variable
+```
+
+Analysing the full model with standartized predictors
+
+```{r}
+model_scale <- lm(medv ~ ., main_scale)
+summary(model_scale)
+```
+
+As can be seen, the variable influencing housing cost the most is 'lstat'.
+
+### Multicollinearity
+
+Absence of multicollinearity among variables in a dataset is considered to be the most crutial for correct construction of a multiple linear model. Having in mind tha number of variables in the dataset, one can expect some predictors to be well correlated
+
+Let's test this statement
+
+```{r}
+vif(model_scale)
+```
+
+As expected, the dataset contains highly interconnected predictors so that the full model has to be optimized via variables depletion. 
+
+Reducing the number of variables to minimaze 'vif' parameter 
+
+```{r}
+model_no_tax <- update(model_scale, .~. - tax) 
+vif(model_no_tax)
+
+model_no_tax_nox <- update(model_no_tax, .~. - nox) 
+vif(model_no_tax_nox)
+
+model_no_tax_nox_dis <- update(model_no_tax_nox, .~. - dis) 
+vif(model_no_tax_nox_dis)
+
+model_no_tax_nox_dis_lstat <- update(model_no_tax_nox_dis, .~. - lstat) 
+vif(model_no_tax_nox_dis_lstat)
+
+model_no_tax_nox_dis_lstat_rad <- update(model_no_tax_nox_dis_lstat, .~. - rad) 
+vif(model_no_tax_nox_dis_lstat_rad)
+
+model_no_tax_nox_dis_lstat_rad_indus <- update(model_no_tax_nox_dis_lstat_rad, .~. - indus) 
+vif(model_no_tax_nox_dis_lstat_rad_indus)
+
+summary(model_no_tax_nox_dis_lstat_rad_indus)
+```
+
+## Model optimization
+
+Next, to improve performance of the created model one can test significance of every remainig in the model predictor and reduce their number to get only those that are significant via (backward elimination strategy)
+
+### Backward significant predictors determination
+
+```{r}
+mod1 <- model_no_tax_nox_dis_lstat_rad_indus
+drop1(mod1, test = "F")
+
+mod2 <- update(mod1, .~. - zn)
+drop1(mod2, test = "F")
+```
+
+### Model diagnostics
+
+Plotting residuals, Cook's distance and quantile plots
+
+```{r}
+mod2_diag <- data.frame(fortify(mod2), main[, c(1, 4, 6, 7, 11, 12)])
+gg_resid <- ggplot(data = mod2_diag, aes(x = .fitted, y = .stdresid)) + 
+  geom_point() + 
+  geom_hline(yintercept = 0) +
+  geom_smooth(method = "lm") +
+  geom_hline(yintercept = 2, color = "red") +
+  geom_hline(yintercept = -2, color = "red")
+gg_resid
+
+ggplot(mod2_diag, aes(x = 1:nrow(mod2_diag), y = .cooksd)) + 
+  geom_bar(stat = "identity") + 
+  geom_hline(yintercept = 2, color = "red")
+
+qqPlot(mod2_diag$.stdresid)
+
+```
+
+Overall, as can be seen from the last plot, the data (the vast majority of its variables) can be characterized by relatively hight variance, so that high residuals variance takes place as well. An alternative to takle this issue  would be to apply principal component analysis to the dataset before building the model, however this goes beyond the scope of analysis.
+
+## Optimal model correction
+
+### Step-by-step selection of predictors by significance
+
+For this step of analysis one can omit this issues and step back to test removed variables to have an impact on dependent variable. The dataset has a very high level of predictors correlation. And at the moment of selection by vif, we had to abandon a large number of predictors and their contribution to the total variability. Despite the collinearity, some of them have to be returned.
+
+```{r}
+res_1 <- gg_resid + aes(x = main$indus)
+res_2 <- gg_resid + aes(x = main$rad)
+res_3 <- gg_resid + aes(x = main$lstat)
+res_4 <- gg_resid + aes(x = main$dis)
+res_5 <- gg_resid + aes(x = main$nox)
+res_6 <- gg_resid + aes(x = main$tax)
+
+grid.arrange(res_1, res_2, res_3, res_4, res_5, res_6, nrow = 3)
+```
+
+Here we see that at least one variable, namely 'lstat' that has been identified to have the largest impact on dependent variable in the full model, indeed needs to be returned in the optimised model
+
+```{r}
+mod3 <- update(mod2, .~. + lstat)
+drop1(mod3, test = "F")
+```
+
+Testing for predictor significance again
+
+```{r}
+mod4 <- update(mod3, .~. - crim)
+drop1(mod4, test = "F")
+
+mod5 <- update(mod4, .~. - age)
+drop1(mod5, test = "F")
+
+mod5_diag <- data.frame(fortify(mod5), main[, c(4, 6, 11, 12, 13)])
+
+gg_resid <- ggplot(data = mod5_diag, aes(x = .fitted, y = .stdresid)) + 
+  geom_point() + 
+  geom_hline(yintercept = 0) +
+  geom_smooth(method = "lm") +
+  geom_hline(yintercept = 2, color = "red") +
+  geom_hline(yintercept = -2, color = "red")
+gg_resid
+
+ggplot(mod5_diag, aes(x = 1:nrow(mod5_diag), y = .cooksd)) + 
+  geom_bar(stat = "identity") + 
+  geom_hline(yintercept = 2, color = "red")
+
+qqPlot(mod5_diag$.stdresid)
+
+qqPlot(main_scale$lstat)
+
+res_1 <- gg_resid + aes(x = main$crim)
+res_2 <- gg_resid + aes(x = main$zn)
+res_3 <- gg_resid + aes(x = main$indus)
+res_4 <- gg_resid + aes(x = main$nox)
+res_5 <- gg_resid + aes(x = main$age)
+res_6 <- gg_resid + aes(x = main$dis)
+res_7 <- gg_resid + aes(x = main$rad)
+res_8 <- gg_resid + aes(x = main$tax)
+
+grid.arrange(res_1, res_2, res_3, res_4, res_5, res_6, res_7, res_8, nrow = 4)
+```
+
+At this stage it seems reasonable to finally add variable 'dis' back to the model as well and repeat diagnostics 
+
+```{r}
+mod6 <- update(mod5, .~. + dis)
+drop1(mod6, test = "F")
+
+mod6_diag <- data.frame(fortify(mod6), main[, c(4, 6, 8, 11, 12, 13)])
+
+gg_resid <- ggplot(data = mod6_diag, aes(x = .fitted, y = .stdresid)) + 
+  geom_point() + 
+  geom_text(aes(label=rownames(mod6_diag)),hjust=0, vjust=0) + 
+  geom_hline(yintercept = 0) +
+  geom_smooth(method = "lm") +
+  geom_hline(yintercept = 2, color = "red") +
+  geom_hline(yintercept = -2, color = "red")
+gg_resid
+
+ggplot(mod6_diag, aes(x = 1:nrow(mod6_diag), y = .cooksd)) + 
+  geom_bar(stat = "identity") + 
+  geom_hline(yintercept = 2, color = "red")
+
+qqPlot(mod6_diag$.stdresid)
+
+summary(mod6)
+
+```
+
+From the last diagnostics we see that most of the troubles have remained, so the generated model, of course, is imperfect. 
+
+Nethertheless, it is known that not all types of analyzes can be applied equally well to different data. For example, in our case, linear models are not the best choice due to the high collinearity of the predictors. And, as has neeb mentioned above, there are ways forward, for instance, multivariate and/or dimensionality reduction analysis.
+
+### Model analysis
+
+As a result of selection and correction, we obtained the following model
+
+```{r}
+final_mod <- lm(formula = medv ~ rm + ptratio + black + chas + lstat + dis, data = main)
+summary(final_mod)
+```
+
+**medv = 17.01 + 4.40 * rm - 0.90 * ptratio + 0.01 * black + 2.72 * chas - 0.60 * lstat - 0.56 * dis**
+
+The first value, Intercept: shows what value the dependent variable will have if all predictors are equal to zero
+
+Remaining coefficients in front of the predictors show how many units of the dependent variable will change if the value of this predictor changes by one, while all other predictors being constant.
+
+## Model predictions
+
+From the optimized final model with scaled predictors we can see that factor influencing value of housing the most is 'lstat'
+
+```{r}
+final_mod_scale <- lm(formula = medv ~ rm + ptratio + black + chas + lstat + dis, data = main_scale)
+summary(final_mod_scale)
+```
+
+For prediction we create test dataset with 'lstat' variable ranging from min to max its estimate from the original data and other variables with constant values equal to its mean values from the original data
+
+```{r}
+
+MyData6 <- data.frame(
+  rm = mean(main$lstat), 
+  chas = as.factor(0), # setting factor level manually
+  ptratio = mean(main$ptratio),
+  black = mean(main$black),
+  lstat = seq(min(main$lstat), max(main$lstat), length.out = 100),
+  dis = mean(main$dis))
+
+Predictions <- predict(mod6, newdata = MyData6,  interval = 'confidence')
+MyData6 <- data.frame(MyData6, Predictions)
+
+Pl_predict <- ggplot(MyData6, aes(x = lstat, y = fit)) +
+  geom_ribbon(alpha = 0.2, aes(ymin = lwr, ymax = upr)) +
+  geom_line() + 
+  ggtitle("Multiple linear model prediction")+
+  coord_cartesian(ylim = c(5, 80))
+Pl_predict
+```
+
+In conclusion, factors 'rm', 'ptratio' and 'lstat' can be defined as the key factors influencing housing value. Thus, when thinking about ideal housing sales these factors have to be considered first.  
+
