@@ -1,0 +1,204 @@
+---
+title: "Ovarian Cancer Survival Data analysis"
+author: "Your collaborator"
+
+output: 
+  html_document:
+    toc: true
+    toc_depth: 1
+    toc_float: true
+    number_section: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(survival)
+library(ggplot2)
+library(dplyr)
+library(survminer)
+library(ranger)
+library(ggfortify)
+library(coin)
+theme_set(theme_bw())
+```
+
+The analysis presented is an exploration of the Survival in a randomised trial comparing two treatments for ovarian cancer Data Set available at the "survival" R package 
+
+# Reading the data and learning its structure
+
+Read and have a first look at the data
+
+```{r}
+df <- ovarian
+str(df)
+```
+
+According to the description given in the package, there are six columns that describe the data set
+
+* futime:	survival or censoring time
+* fustat:	censoring status
+* age:	in years
+* resid.ds:	residual disease present (1=no,2=yes)
+* rx:	treatment group
+* ecog.ps:	ECOG performance status (1 is better, see reference)
+
+Let's modify the data and look at variables in the details
+
+For more convenient interpretation, one can convert obviously nominative variables into factors with two levels
+```{r}
+df$resid.ds <- factor(df$resid.ds,
+                      levels = c(1, 2), 
+                      labels = c("No", "Yes"))
+df$rx <- factor(df$rx,
+                levels = c(1, 2), 
+                labels = c("First", "Second"))
+df$ecog.ps <- factor(df$ecog.ps,
+                     levels = c(1, 2), 
+                     labels = c("Good", "Bad"))
+```
+
+The futime column holds the survival times. This is the response variable.
+fustat, on the other hand, tells you if an individual patients’ survival time is censored
+
+```{r}
+summary(as.factor(df$fustat))
+```
+Apparently, the 26 patients in this study received either one of two therapy regimens
+```{r}
+summary(as.factor(df$rx))
+```
+
+And the attending physician assessed the regression of tumors
+```{r}
+summary(as.factor(df$resid.ds))
+```
+
+Patients’ performance according to the standardized ECOG criteria
+```{r}
+summary(as.factor(df$ecog.ps))
+```
+Also, looking at the distribution of the Age variable one can identify rather clear division of the patients into two groups
+
+```{r}
+hist(df$age, breaks = 10)
+```
+
+Thus, let's create a new variable dividing investigated individuals into two groups "Elderly" and "Young"
+
+```{r}
+df <- df %>% 
+  mutate(age_group = ifelse(age >=50, "Elderly", "Young"))
+df$age_group <- factor(df$age_group)
+```
+
+Summary of the modified dataframe
+```{r}
+summary(df)
+```
+
+# Kaplan Meier Survival Curves building
+
+Creation of the time scaling
+
+```{r}
+km <- with(df, Surv(futime, fustat))
+km
+```
+
+Building a model and visualizing dependency of survival by the Age 
+
+```{r}
+km_age_fit <- survfit(km ~ age_group, data=df)
+km_age_fit
+```
+```{r}
+ggsurvplot(km_age_fit, data = df, pval = TRUE, pval.method = TRUE, conf.int = TRUE)
+```
+Building a model and visualizing dependency of survival by the resid.ds 
+
+```{r}
+km_resid_fit <- survfit(km ~ resid.ds, data=df)
+km_resid_fit
+```
+```{r}
+ggsurvplot(km_resid_fit, data = df, pval = TRUE, pval.method = TRUE, conf.int = TRUE)
+```
+
+Building a model and visualizing dependency of survival by the rx status
+
+```{r}
+km_rx_fit <- survfit(km ~ rx, data=df)
+km_rx_fit
+```
+```{r}
+ggsurvplot(km_rx_fit, data = df, pval = TRUE, pval.method = TRUE, conf.int = TRUE)
+```
+
+Building a model and visualizing dependency of survival by the ecog.ps status
+
+```{r}
+km_ecog_fit <- survfit(km ~ ecog.ps, data=df)
+km_ecog_fit
+```
+```{r}
+ggsurvplot(km_ecog_fit, data = df, pval = TRUE, pval.method = TRUE, conf.int = TRUE)
+```
+
+# Sirvival statistical testing
+
+Let's determine is there any difference in survival by differentiating groups?
+
+```{r}
+survdiff(km ~ age_group, data = df)
+```
+```{r}
+logrank_test(km ~ age_group, data = df)
+```
+
+```{r}
+survdiff(km ~ resid.ds, data=df)
+```
+```{r}
+logrank_test(km ~ resid.ds, data=df)
+```
+
+```{r}
+survdiff(km ~ rx, data=df)
+```
+```{r}
+logrank_test(km ~ rx, data=df)
+```
+
+```{r}
+survdiff(km ~ ecog.ps, data=df)
+```
+```{r}
+logrank_test(km ~ ecog.ps, data=df)
+```
+Testing using the Log-rank test shows only diversions by Age and Resid.ds variables to be possibly significant. However, giving the p-values and judging strictly, the findings are just tendencies and require further investigation on larger cohorts of patients
+
+# Risk factors analysis (Cox-models)
+
+Build Cox-model of significant factors levels affecting survival
+```{r}
+cox <- coxph(km ~ age_group + resid.ds + rx + ecog.ps, data = df)
+summary(cox)
+```
+As we've seen above with KM plots and Log-rank testing, this model also identifies Age and Resid.ds variables to be significant as well as rx. One pitfall underlying Cox-testing is the assumption of covariates (factors) to be constant across time. In real life, this assumption could be disturbed thus making findings unreliable. To tackle this issue, one can further apply covariate analysis to uncover interconnected variables
+
+```{r}
+aa_fit <- aareg(km ~ age_group + resid.ds + rx + ecog.ps, data = df)
+autoplot(aa_fit)
+```
+
+As one can see, Age and Resid.ds variables are indeed may be influenced to some extent
+
+One more type of analysis of factors influencing survival is the Hazard Ratio analysis
+
+```{r}
+fit.coxph <- coxph(km ~ age_group + resid.ds + rx + ecog.ps, data = df)
+ggforest(fit.coxph, data = df)
+```
+According to the results, being Young, having no residual diseases present, and undergoing second type of treatment, a patient may have greater chances to survive and live longer. 
+
+Overall, all testing approaches are well support others methods findings. However, further investigation with larger cohorts are needed to clarify this fundings.
