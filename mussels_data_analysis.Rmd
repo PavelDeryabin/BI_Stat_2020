@@ -1,0 +1,424 @@
+---
+title: "Mussels data analysis"
+author: "Your collaborator"
+
+output: 
+  html_document:
+    toc: true
+    toc_depth: 2
+    toc_float: true
+    number_section: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(ggpubr)
+library(dplyr)
+library(readr)
+library(psych)
+```
+
+# Reading the data
+
+Dear Colleagues, congratulations on your successful expedition! 
+In response to your request, here is some initial analysis to help you understand your findings.
+
+In order to start calculations, please provide the full path to the directory where your datasets are stored (that is, files with .csv extension) to a specific function made for you to help you integrate all your datasets at once. 
+
+```{r, echo=FALSE}
+read_dataset <- function(path_to_dataset) {
+#dir <- ("Data")
+  dir <- (path_to_dataset)
+  files <- list.files(file.path(dir), pattern="*.csv", full.names = T)
+  data_list = lapply(files, read.csv, header = TRUE, fill = TRUE)
+  df_raw_data <- do.call(rbind, data_list)
+  rm(dir,files,data_list)
+  return(df_raw_data)
+}
+```
+
+```{r}
+df_raw_data <- read_dataset("...") # For example, "~/BI/R/project1/Data"
+```
+
+Now, let's look at the row data and learn its main parameters:
+
+```{r}
+head(df_raw_data)
+str(df_raw_data) 
+```
+
+# Modification of the dataset structure
+
+To begin with, as R failes to determine automatically types for the first three variables,
+these variables seem to have some discordance. Let's look at them and do transformations where necessary:
+
+```{r}
+levels(factor(df_raw_data$Rings)) # is there smth unusual with the levels for variable "Rings"?
+levels(factor(df_raw_data$Sex..1...male..2...female..3...uvenil.)) # is there smth unusual with the second variable?
+levels(factor(df_raw_data$Length)) # is there smth unusual with the levels for variable "Length"?
+```
+
+Let's fix this discordance:
+
+```{r}
+df_raw_data$Rings[df_raw_data$Rings == "nine"] <- 9 # translate the value "nine" into numeric data
+names(df_raw_data)[names(df_raw_data) == 'Sex..1...male..2...female..3...uvenil.'] <- 'Sex' # change the name of the third variable and reset in values
+df_raw_data$Sex[df_raw_data$Sex == "male"] <- "Male"
+df_raw_data$Sex[df_raw_data$Sex == "1"] <- "Male"
+df_raw_data$Sex[df_raw_data$Sex == "one"] <- "Male"
+df_raw_data$Sex[df_raw_data$Sex == "2"] <- "Female"
+df_raw_data$Sex[df_raw_data$Sex == "3"] <- "Juvenile"
+df_raw_data$Sex[df_raw_data$Sex == "three"] <- "Juvenile"
+df_raw_data$Length[df_raw_data$Length == "No data! I forgot to mesure it!("] <- NA
+
+# levels(factor(df_raw_data$Rings)) # Use this commands to check the improvements if nessesary 
+# levels(factor(df_raw_data$Sex))
+# levels(factor(df_raw_data$Length))
+```
+
+Now, reset valid types for the first three variables and look at the renewed dataset:
+
+```{r}
+df_raw_data$Rings <- as.numeric(df_raw_data$Rings) 
+df_raw_data$Sex <- as.factor(df_raw_data$Sex)
+df_raw_data$Length <- as.numeric(df_raw_data$Length)
+str(df_raw_data)
+```
+
+# Exploratory analysis
+
+Great! Let's start with EDA and analyse distributions of all numeric variables for the three sex levels of mussels:
+
+```{r, echo=FALSE, warning=FALSE}
+var1 <- ggplot(df_raw_data, aes(Sex, Rings, fill = Sex)) + 
+  geom_violin(alpha=0.3) +
+  geom_boxplot(width=0.2, alpha=0.8) +
+  theme_bw() +
+  ggtitle("Number of rings") +
+  xlab(label = "Sex") + 
+  ylab(label = "Rings") + 
+  scale_fill_manual(values=c("#ff596a", "#00cca3", "#a888bf", "black")) +
+  theme(legend.position = "None",
+        plot.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(angle=45, hjust = 1))
+
+var3 <- ggplot(df_raw_data, aes(Sex, Length, fill = Sex)) + 
+  geom_violin(alpha=0.3) +
+  geom_boxplot(width=0.2, alpha=0.8) +
+  theme_bw() +
+  ggtitle("Body length") +
+  xlab(label = "Sex") + 
+  ylab(label = "Length") + 
+  scale_fill_manual(values=c("#ff596a", "#00cca3", "#a888bf", "black")) +
+  theme(legend.position = "None",
+        plot.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(angle=45, hjust = 1))
+
+var4 <- ggplot(df_raw_data, aes(Sex, Diameter, fill = Sex)) + 
+  geom_violin(alpha=0.3) +
+  geom_boxplot(width=0.2, alpha=0.8) +
+  theme_bw() + 
+  ggtitle("Body diameter") +
+  xlab(label = "Sex") + 
+  ylab(label = "Diameter") + 
+  scale_fill_manual(values=c("#ff596a", "#00cca3", "#a888bf", "black")) +
+  theme(legend.position = "None",
+        plot.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(angle=45, hjust = 1))
+
+var5 <- ggplot(df_raw_data, aes(Sex, Height, fill = Sex)) + 
+  geom_violin(alpha=0.3) +
+  geom_boxplot(width=0.2, alpha=0.8) +
+  theme_bw() + 
+  ggtitle("Body heigth") +
+  xlab(label = "Sex") + 
+  ylab(label = "Height") + 
+  scale_fill_manual(values=c("#ff596a", "#00cca3", "#a888bf", "black")) +
+  theme(legend.position = "None",
+        plot.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(angle=45, hjust = 1))
+
+var6 <- ggplot(df_raw_data, aes(Sex, Whole_weight, fill = Sex)) + 
+  geom_violin(alpha=0.3) +
+  geom_boxplot(width=0.2, alpha=0.8) +
+  theme_bw() + 
+  ggtitle("Total weight") +
+  xlab(label = "Sex") + 
+  ylab(label = "Whole_weight") + 
+  scale_fill_manual(values=c("#ff596a", "#00cca3", "#a888bf", "black")) +
+  theme(legend.position = "None",
+        plot.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(angle=45, hjust = 1))
+
+var7 <- ggplot(df_raw_data, aes(Sex, Shucked_weight, fill = Sex)) + 
+  geom_violin(alpha=0.3) +
+  geom_boxplot(width=0.2, alpha=0.8) +
+  theme_bw() + 
+  ggtitle("Shucked weight") +
+  xlab(label = "Sex") + 
+  ylab(label = "Shucked_weight") + 
+  scale_fill_manual(values=c("#ff596a", "#00cca3", "#a888bf", "black")) +
+  theme(legend.position = "None",
+        plot.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(angle=45, hjust = 1))
+
+var8 <- ggplot(df_raw_data, aes(Sex, Viscera_weight, fill = Sex)) + 
+  geom_violin(alpha=0.3) +
+  geom_boxplot(width=0.2, alpha=0.8) +
+  theme_bw() + 
+  ggtitle("Viscera weight") +
+  xlab(label = "Sex") + 
+  ylab(label = "Viscera_weight") + 
+  scale_fill_manual(values=c("#ff596a", "#00cca3", "#a888bf", "black")) +
+  theme(legend.position = "None",
+        plot.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(angle=45, hjust = 1))
+
+var9 <- ggplot(df_raw_data, aes(Sex, Shell_weight, fill = Sex)) + 
+  geom_violin(alpha=0.3) +
+  geom_boxplot(width=0.2, alpha=0.8) +
+  theme_bw() + 
+  ggtitle("Shell weight") +
+  xlab(label = "Sex") + 
+  ylab(label = "Shell_weight") + 
+  scale_fill_manual(values=c("#ff596a", "#00cca3", "#a888bf", "black")) +
+  theme(legend.position = "None",
+        plot.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(angle=45, hjust = 1))
+
+ggarrange(var1, var3, var4, var5, var6, var7, var8, var9,
+                    ncol = 4, nrow = 2)
+```
+
+As one can see, "Sex" variable contain some missing value. How many such values?
+
+```{r}
+sum(is.na(df_raw_data$Sex))
+```
+
+There is only one such an observation. As can be seen from the figure above, this value can not be set manually. All that we could say about this value is just that it is likely to be from an adult individual. But it is impossible to discriminate whether it is a male or a female. So, we remove this observation from the dataset:
+
+```{r}
+df_raw_data <- dplyr::filter(df_raw_data, !is.na(Sex)) # remove NA from Sex
+```
+
+Next, check other variables for missing values:
+
+```{r}
+sum(is.na(df_raw_data$Rings))
+sum(is.na(df_raw_data$Length))
+sum(is.na(df_raw_data$Diameter))
+sum(is.na(df_raw_data$Height))
+sum(is.na(df_raw_data$Whole_weight))
+sum(is.na(df_raw_data$Shucked_weight))
+sum(is.na(df_raw_data$Viscera_weight))
+sum(is.na(df_raw_data$Shell_weight))
+```
+
+Now, the dataset appears to have a relatively small number of missed values or severe outliers. In this situation, the best way to manage them is to replace for the median considering "Sex" grouping, as the median estimate better suits a distribution stably than the mean one and values vary depending on "Sex" level.
+
+```{r}
+df_data <- df_raw_data %>%
+  group_by(Sex) %>% 
+  mutate(Length = ifelse(is.na(Length), median(Length, na.rm = T), Length)) %>% 
+  mutate(Height = ifelse((Height > 0.3) | (is.na(Height)), median(Height, na.rm = T), Height)) %>% 
+  mutate(Diameter = ifelse(is.na(Diameter), median(Diameter, na.rm = T), Diameter)) %>%
+  mutate(Whole_weight = ifelse(is.na(Whole_weight), median(Whole_weight, na.rm = T), Whole_weight)) %>%
+  mutate(Shucked_weight = ifelse(is.na(Shucked_weight), median(Shucked_weight, na.rm = T), Shucked_weight)) %>%
+  mutate(Viscera_weight = ifelse(is.na(Viscera_weight), median(Viscera_weight, na.rm = T), Viscera_weight)) %>%
+  mutate(Shell_weight = ifelse(is.na(Shell_weight), median(Shell_weight, na.rm = T), Shell_weight)) 
+sum(is.na(df_data$Length)) # check transformation for "Length" variable
+```
+
+Finally, let's look at the interrelation between all numeric variables of the fixed dataset:
+
+```{r}
+df <- df_data[, -c(2)]
+plot(df, main = "Interconnection among numeric variables\nin the dataset")
+```
+
+As can be seen, in general, almost all pairs of variables have some degree of connection, espesially those ones that consider close parameters (size or weight). Here we can also see, that our transformations were successful, as the variable "Height" does not contain obvious outliers anymore.
+
+Here is also main statistics of all variables, depending on mussels sex:
+```{r}
+describeBy(df_data[,c(-2)], group = df_data$Sex)
+```
+# Specific questions
+
+## Mean and SD of mussels "Length" depending on "Sex"
+
+```{r, message=FALSE, warning=FALSE}
+df_data %>% 
+  group_by(Sex) %>%  
+  summarise(Mean = mean(Length),
+            SD = sd(Length))
+```
+
+## Percentage of molluscs that has the "Height" variable less than 0.165
+
+```{r}
+num_of_subset <- length(df_data$Height[df_data$Height <= 0.165])
+num_total <- length(df_data$Height)
+persentage <- 100 * num_of_subset / num_total
+round(persentage, 2)
+```
+
+## "Length" value, which is greater than 92% of all observations
+
+```{r}
+quantile(df_data$Length, probs = c(0.92))
+```
+
+Let's look at this:
+
+```{r, message=FALSE}
+ggplot(df_data, aes(Length)) + 
+  geom_histogram(alpha=0.7) +
+  geom_vline(xintercept=0.67, linetype="dashed", 
+             color = "red", size=1)+
+  ggtitle("Histogram of \"Length\" variable") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  theme_bw()
+```
+
+## Generating new variable "Lenght_z_scores" by "Length" values standardization
+
+```{r}
+df_data <- df_data %>% 
+  mutate(Length_z_scores = (Length - mean(Length)) / sd(Length))
+head(df_data)
+```
+
+## Comparison of the diameters of the mussels with the number of rings 5 and 15
+
+First, subset the dataset to get observations relevant for the comparison, convert "Rings" variable to a factor and look at the data:
+```{r}
+df7 <- df_data %>% 
+  filter(Rings == c(5, 15))
+df7$Rings <- as.factor(df7$Rings)
+str(df7)
+```
+
+Next, let's visualize a difference for the compared groups. Here are some additional ready for a publication plots made for you. Notably, nowadays, despite being a bit nonstandard, the second plot is considered to be the most informative, as it reflects both a degree of confidence (95% CI) and distrubutions of values of the compared groups:
+
+```{r}
+ggplot(df7, aes(Rings, Diameter, fill=Rings)) +
+  geom_violin(alpha=0.4) +
+  geom_boxplot(width=0.2, alpha=0.8) +
+  #stat_summary(fun.data=mean_se, geom="errorbar", color="black", width=0.3) +
+  theme_bw() + 
+  xlab(label = "Rings number") + 
+  ylab(label = "Diameter") + 
+  ggtitle("Diameter of mussles\nwith the number of rings 5 and 15") +
+  scale_fill_manual(values=c("#ff596a", "#a888bf")) +
+  theme(legend.position = "None",
+        plot.title = element_text(hjust = 0.5))
+
+ggplot(df7, aes(Rings, Diameter, fill=Rings)) +
+  geom_violin(alpha=0.7) +
+  stat_summary(fun = mean, geom = "point") + 
+  stat_summary(fun.data = mean_ci, geom = "errorbar", width=0.3) +
+  theme_bw() + 
+  xlab(label = "Rings number") + 
+  ylab(label = "Diameter") + 
+  ggtitle("Diameter of mussles\nwith the number of rings 5 and 15") +
+  scale_fill_manual(values=c("#ff596a", "#a888bf")) +
+  theme(legend.position = "None",
+        plot.title = element_text(hjust = 0.5))
+```
+
+It is seen, that it has to be a huge difference between groups. Let's check it more strictly by testing via t-test. Firstly, check for the conditions of applicability such a parametric criteria:
+
+```{r}
+ggplot(df7, aes(Diameter, fill = Rings)) +
+  geom_density(alpha=0.7)+
+  ggtitle("Diameter of mussles\nwith the number of rings 5 and 15") +
+  scale_fill_manual(values=c("#ff596a", "#a888bf")) +
+  theme_bw() +
+  theme(legend.position = "bottom",
+        plot.title = element_text(hjust = 0.5))
+
+shapiro.test(df7$Diameter[df7$Rings == "5"]) # whether we can say the values are distributed unnormally
+shapiro.test(df7$Diameter[df7$Rings == "15"])
+
+bartlett.test(Diameter ~ Rings, df7) # is there a difference between variation between the groups
+```
+
+According to the results above, from density plot and testing by Shapiro-test distributions of the data for both groups can be considered as normal, and both groups have rather homogenenic variances. Thus, to fully suit the data the standard parametric Welch Two Sample t-test can be applied. 
+
+```{r}
+t.test(Diameter ~ Rings, df7) 
+```
+
+To clarify the output, there is a strong evidence of a huge difference between compared groups, as chances to get such or more large difference given stadard zero hypothesis H0 are very small (p value = `r t.test(Diameter ~ Rings, df7)$p.value`, t = `r round(t.test(Diameter ~ Rings, df7)$statistic, 2)`, df = `r round(t.test(Diameter ~ Rings, df7)$parameter, 2)`). 
+
+## Interrelation between "Diameter" and "Whole_weight" variables
+
+First, make a scaterplots for the variables. Secong plot, on the right, has been built via sqrt() transformation of the dependant variable, as the connection between variables is not linear:
+
+```{r, , message=FALSE}
+plot1 <- ggplot(df_data, aes(Diameter, Whole_weight, fill = "white")) +
+  geom_point(alpha=0.3) + 
+  geom_smooth() + 
+  theme_bw() + 
+  xlab(label = "Diameter") + 
+  ylab(label = "Whole weight") +
+  ggtitle("Interconnection between\nwhole weight and\ndiameter of a body") +
+  theme(legend.position = "None",
+        plot.title = element_text(hjust = 0.5))
+
+plot2 <- ggplot(df_data, aes(Diameter, sqrt(Whole_weight), fill = "white")) +
+  geom_point(alpha=0.3) + 
+  geom_smooth(method = "lm") + 
+  theme_bw() + 
+  xlab(label = "Diameter") + 
+  ylab(label = "Whole weight") +
+  ggtitle("Interconnection between\nsqrt(whole weight) and\ndiameter of a body") +
+  theme(legend.position = "None",
+        plot.title = element_text(hjust = 0.5))
+
+ggarrange(plot1, plot2, ncol = 2, nrow = 1)
+```
+
+To check statistically apply Spearman's rank correlation testing as follows:
+
+```{r, warning=FALSE}
+cor.test(sqrt(df_data$Whole_weight), df_data$Diameter, method = 'spearman')
+```
+
+Then we can create a linear model describing the interconnection of variables. As can be seen, tha variables a positively and statistically significantly connected:
+```{r}
+model <- lm(sqrt(Whole_weight) ~ Diameter, df_data)
+summary(model)
+```
+
+In addition, one can look in more details at the analysed interconnection, as the model for juvenile individuals might be slightly different from the adult ones, which are almost simular:
+
+```{r, message=FALSE}
+ggplot(df_data, aes(Diameter, sqrt(Whole_weight), color = Sex)) +
+  geom_point(alpha=0.3) + 
+  geom_smooth(method = "lm") + 
+  theme_bw() + 
+  xlab(label = "Diameter") + 
+  ylab(label = "Whole weight") +
+  scale_color_manual(values=c("#ff596a", "#00cca3", "#a888bf"))+
+  ggtitle("Interconnection between sqrt(whole weight)\nand diameter of a mussle by its sex") +
+  theme(legend.position = "bottom",
+        plot.title = element_text(hjust = 0.5))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
